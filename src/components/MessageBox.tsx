@@ -62,7 +62,7 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
     setIsSubmitting(true);
     try {
       const moderationResult: ModerateContentOutput = await moderateContent({ text: messageText });
-
+      console.log(moderationResult);
       if (!moderationResult.isSafe) {
         toast({
           title: 'Message Blocked',
