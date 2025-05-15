@@ -1,3 +1,4 @@
+
 import { supabase } from './supabaseClient';
 import type { LinkData, Message } from './types';
 
@@ -20,7 +21,7 @@ export const createLink = async (): Promise<LinkData> => {
     .single();
 
   if (error) {
-    console.error('Error creating link:', error);
+    console.error('Error creating link. Supabase error:', JSON.stringify(error, null, 2));
     throw error;
   }
 
@@ -47,7 +48,7 @@ export const getLink = async (linkId: string): Promise<LinkData | undefined> => 
     if (error.code === 'PGRST116') { // PGRST116: "Query response not a single object" (i.e. not found)
       return undefined;
     }
-    console.error('Error fetching link:', error);
+    console.error('Error fetching link. Supabase error:', JSON.stringify(error, null, 2));
     throw error;
   }
   
@@ -82,7 +83,7 @@ export const addMessage = async (
     .single();
 
   if (error) {
-    console.error('Error adding message:', error);
+    console.error('Error adding message. Supabase error:', JSON.stringify(error, null, 2));
     throw error;
   }
 
@@ -109,9 +110,10 @@ export const getMessages = async (linkId: string): Promise<Message[]> => {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching messages:', error);
+    console.error('Error fetching messages. Supabase error:', JSON.stringify(error, null, 2));
     throw error;
   }
 
   return data || [];
 };
+
