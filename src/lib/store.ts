@@ -114,6 +114,34 @@ export const getMessages = async (linkId: string): Promise<Message[]> => {
     throw error;
   }
 
-  return data || [];
+  return (data || []).map(msg => ({
+    id: msg.id,
+    linkId: msg.link_id,
+    text: msg.text,
+    createdAt: msg.created_at,
+    isAnonymous: msg.is_anonymous,
+    isSafe: msg.is_safe,
+    moderationReason: msg.moderation_reason,
+  }));
 };
 
+export const deleteMessage = async (messageId: string, linkId: string, secretKey: string): Promise<boolean> => {
+  // First, verify ownership using the secret key
+  const linkData = await getLink(linkId);
+  if (!linkData || linkData.secretKey !== secretKey) {
+    console.error('Error deleting message: Invalid linkId or secretKey.');
+    throw new Error('Authorization failed. Cannot delete message.');
+  }
+
+  const { error } = await supabase
+    .from('messages')
+    .delete()
+    .match({ id: messageId, link_id: linkId }); // Ensure we only delete from the correct link
+
+  if (error) {
+    console.error('Error deleting message. Supabase error:', JSON.stringify(error, null, 2));
+    throw error;
+  }
+
+  return true;
+};
