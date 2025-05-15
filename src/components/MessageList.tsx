@@ -1,69 +1,88 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { getMessages, getLink, type Message } from '@/lib/store';
+import { getMessages, getLink, type Message, type LinkData } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
-import { AlertTriangle, CheckCircle2, MessageCircle, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, MessageCircle, RefreshCw, ShieldAlert, ShieldX } from 'lucide-react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 interface MessageListProps {
   linkId: string;
+  secretKey?: string; // Secret key from URL query param
 }
 
-export default function MessageList({ linkId }: MessageListProps) {
+export default function MessageList({ linkId, secretKey }: MessageListProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLinkValid, setIsLinkValid] = useState<boolean | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null); // null: loading, true: authorized, false: not authorized
+  const [accessDeniedReason, setAccessDeniedReason] = useState<string>("Access Denied. The link may be invalid or your secret key is incorrect/missing.");
   const { toast } = useToast();
 
-  const fetchMessages = () => {
+  const validateAndFetchMessages = () => {
     if (typeof window !== 'undefined') {
-      const linkExists = !!getLink(linkId);
-      setIsLinkValid(linkExists);
-      if (linkExists) {
-        const storedMessages = getMessages(linkId);
-        // Sort messages by date, newest first for typical chat display
-        storedMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setMessages(storedMessages);
+      setIsLoading(true);
+      const linkData: LinkData | undefined = getLink(linkId);
+
+      if (!linkData) {
+        setAccessDeniedReason("Access Denied. This message link is not valid or has expired.");
+        setIsAuthorized(false);
+        setIsLoading(false);
+        return;
       }
+
+      if (!secretKey || linkData.secretKey !== secretKey) {
+        setAccessDeniedReason("Access Denied. The secret key is missing or incorrect. Please use the private link provided during generation.");
+        setIsAuthorized(false);
+        setIsLoading(false);
+        return;
+      }
+      
+      // If authorized
+      setIsAuthorized(true);
+      const storedMessages = getMessages(linkId);
+      storedMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setMessages(storedMessages);
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMessages();
+    validateAndFetchMessages();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkId]);
+  }, [linkId, secretKey]);
 
 
   const handleRefresh = () => {
-    setIsLoading(true);
     // Add a small delay to simulate network request and show loading state
     setTimeout(() => {
-      fetchMessages();
-      toast({ title: "Messages Updated", description: "Fetched the latest messages."});
+      validateAndFetchMessages(); // Re-validates and fetches
+      if(isAuthorized) {
+        toast({ title: "Messages Updated", description: "Fetched the latest messages."});
+      } else {
+         toast({ title: "Update Failed", description: "Could not fetch messages. Check access.", variant: "destructive"});
+      }
     }, 500);
   }
 
-  if (isLoading && isLinkValid === null) {
+  if (isLoading || isAuthorized === null) { // Still loading or initial state
      return (
       <CardContent className="p-6 text-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
-        <p className="text-muted-foreground">Loading messages...</p>
+        <p className="text-muted-foreground">Verifying access and loading messages...</p>
       </CardContent>
     );
   }
   
-  if (!isLinkValid) {
+  if (!isAuthorized) {
     return (
       <CardContent className="p-6">
         <div className="text-center p-6 bg-destructive/10 border border-destructive rounded-md">
-          <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-destructive-foreground mb-2">Invalid Link</h3>
-          <p className="text-muted-foreground">This message link is not valid or has expired. Cannot retrieve messages.</p>
+          <ShieldX className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-destructive-foreground mb-2">Access Denied</h3>
+          <p className="text-muted-foreground">{accessDeniedReason}</p>
         </div>
       </CardContent>
     );
@@ -83,7 +102,7 @@ export default function MessageList({ linkId }: MessageListProps) {
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
               <MessageCircle className="h-16 w-16 text-muted-foreground/50 mb-4" />
               <p className="text-lg font-medium text-muted-foreground">No messages yet.</p>
-              <p className="text-sm text-muted-foreground/80">Share your link to start receiving anonymous messages!</p>
+              <p className="text-sm text-muted-foreground/80">Share your public link to start receiving anonymous messages!</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -95,10 +114,10 @@ export default function MessageList({ linkId }: MessageListProps) {
                         {msg.text}
                       </CardTitle>
                       {msg.isSafe === false && (
-                        <ShieldAlert className="h-5 w-5 text-destructive ml-2 shrink-0" />
+                        <ShieldAlert className="h-5 w-5 text-destructive ml-2 shrink-0" title={`Moderation: ${msg.moderationReason}`} />
                       )}
                        {msg.isSafe === true && (
-                        <CheckCircle2 className="h-5 w-5 text-green-500 ml-2 shrink-0" />
+                        <CheckCircle2 className="h-5 w-5 text-green-500 ml-2 shrink-0" title={`Moderation: ${msg.moderationReason}`} />
                       )}
                     </div>
                   </CardHeader>
@@ -106,9 +125,9 @@ export default function MessageList({ linkId }: MessageListProps) {
                     <span>
                       Received {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
                     </span>
-                     {msg.isSafe === false && (
+                     {msg.isSafe === false && msg.moderationReason && (
                         <span className="italic text-destructive truncate max-w-[150px] sm:max-w-xs" title={msg.moderationReason}>
-                          Blocked: {msg.moderationReason}
+                          Reason: {msg.moderationReason}
                         </span>
                       )}
                   </CardFooter>

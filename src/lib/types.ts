@@ -11,4 +11,5 @@ export interface Message {
 export interface LinkData {
   id: string;
   createdAt: string; // ISO string for date
+  secretKey: string; // Added for message access security
 }

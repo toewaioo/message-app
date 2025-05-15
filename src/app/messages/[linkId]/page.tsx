@@ -6,10 +6,12 @@ interface ViewMessagesPageProps {
   params: {
     linkId: string;
   };
+  searchParams: { [key: string]: string | string[] | undefined };
 }
 
-export default function ViewMessagesPage({ params }: ViewMessagesPageProps) {
-  // Link validation will be handled client-side in MessageList due to localStorage
+export default function ViewMessagesPage({ params, searchParams }: ViewMessagesPageProps) {
+  const secretKey = typeof searchParams.secret === 'string' ? searchParams.secret : undefined;
+
   return (
     <div className="flex flex-col items-center">
       <Card className="w-full max-w-2xl shadow-2xl bg-card/80 backdrop-blur-md">
@@ -21,7 +23,7 @@ export default function ViewMessagesPage({ params }: ViewMessagesPageProps) {
           </CardDescription>
         </CardHeader>
         {/* CardContent is part of MessageList to handle padding correctly with ScrollArea */}
-        <MessageList linkId={params.linkId} />
+        <MessageList linkId={params.linkId} secretKey={secretKey} />
       </Card>
     </div>
   );

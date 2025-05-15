@@ -2,9 +2,6 @@
 // In a real application, you would use a database.
 import type { LinkData, Message } from './types';
 
-const LINKS_KEY = 'whisperlink_links';
-const MESSAGES_KEY_PREFIX = 'whisperlink_messages_';
-
 export const generateId = (): string => {
   if (typeof self !== 'undefined' && self.crypto && self.crypto.randomUUID) {
     return self.crypto.randomUUID();
@@ -22,6 +19,7 @@ export const createLink = (): LinkData => {
   const newLink: LinkData = {
     id: generateId(),
     createdAt: new Date().toISOString(),
+    secretKey: generateId(), // Generate a secret key for accessing messages
   };
   links.push(newLink);
   window.localStorage.setItem(LINKS_KEY, JSON.stringify(links));

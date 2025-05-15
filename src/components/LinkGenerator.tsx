@@ -6,8 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { createLink, type LinkData } from '@/lib/store';
-import { Link2, Copy, Eye, ExternalLink, RefreshCw } from 'lucide-react';
+import { Link2, Copy, Eye, ExternalLink, RefreshCw, KeyRound, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 
 export default function LinkGenerator() {
   const [generatedLink, setGeneratedLink] = useState<LinkData | null>(null);
@@ -74,7 +76,7 @@ export default function LinkGenerator() {
       {generatedLink && (
         <div className="space-y-4 p-6 border border-border rounded-lg bg-background shadow-inner">
           <div>
-            <Label htmlFor="sharableLink" className="text-muted-foreground font-semibold">Your Sharable Anonymous Link:</Label>
+            <Label htmlFor="sharableLink" className="text-muted-foreground font-semibold">Your Sharable Anonymous Link (Public):</Label>
             <div className="flex items-center gap-2 mt-1">
               <Input id="sharableLink" type="text" value={`${baseUrl}/link/${generatedLink.id}`} readOnly className="bg-input text-foreground"/>
               <Button variant="outline" size="icon" onClick={() => copyToClipboard(`${baseUrl}/link/${generatedLink.id}`, 'Sharable Link')} aria-label="Copy sharable link">
@@ -88,19 +90,39 @@ export default function LinkGenerator() {
             </div>
           </div>
           <div>
-            <Label htmlFor="messagesLink" className="text-muted-foreground font-semibold">View Received Messages:</Label>
+            <Label htmlFor="messagesLink" className="text-muted-foreground font-semibold flex items-center">
+              <KeyRound className="h-4 w-4 mr-2 text-destructive" />
+              View Received Messages (Private & Secure):
+            </Label>
             <div className="flex items-center gap-2 mt-1">
-              <Input id="messagesLink" type="text" value={`${baseUrl}/messages/${generatedLink.id}`} readOnly className="bg-input text-foreground"/>
-              <Button variant="outline" size="icon" onClick={() => copyToClipboard(`${baseUrl}/messages/${generatedLink.id}`, 'Messages Link')} aria-label="Copy messages link">
+              <Input 
+                id="messagesLink" 
+                type="text" 
+                value={`${baseUrl}/messages/${generatedLink.id}?secret=${generatedLink.secretKey}`} 
+                readOnly 
+                className="bg-input text-foreground"
+              />
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={() => copyToClipboard(`${baseUrl}/messages/${generatedLink.id}?secret=${generatedLink.secretKey}`, 'Private Messages Link')} 
+                aria-label="Copy private messages link"
+              >
                 <Copy className="h-4 w-4" />
               </Button>
-               <Button variant="outline" size="icon" asChild aria-label="Open messages link">
-                <Link href={`/messages/${generatedLink.id}`} target="_blank">
+               <Button variant="outline" size="icon" asChild aria-label="Open private messages link">
+                <Link href={`/messages/${generatedLink.id}?secret=${generatedLink.secretKey}`} target="_blank">
                   <Eye className="h-4 w-4" />
                 </Link>
               </Button>
             </div>
-             <p className="text-xs text-muted-foreground mt-2">Keep this link private! This is how you view your messages.</p>
+             <Alert variant="destructive" className="mt-3">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Important: Keep This Link Secret!</AlertTitle>
+              <AlertDescription>
+                This "View Received Messages" link contains your unique secret key. Anyone with this exact link can read your messages. Do not share it publicly.
+              </AlertDescription>
+            </Alert>
           </div>
         </div>
       )}
