@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -23,12 +22,13 @@ import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 interface MessageListProps {
-  linkId: string;
+  shortId: string; // Changed from linkId to shortId
   secretKey?: string;
 }
 
-export default function MessageList({ linkId, secretKey }: MessageListProps) {
+export default function MessageList({ shortId, secretKey }: MessageListProps) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [currentLinkData, setCurrentLinkData] = useState<LinkData | null>(null); // Store full link data
   const [isFetching, setIsFetching] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [accessDeniedReason, setAccessDeniedReason] = useState<string>("Access Denied. The link may be invalid or your secret key is incorrect/missing.");
@@ -43,43 +43,49 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
   const validateAndFetchMessages = useCallback(async () => {
     setIsFetching(true);
     try {
-      const linkData: LinkData | undefined = await getLink(linkId);
+      // Fetch link by shortId
+      const linkDataVal: LinkData | undefined = await getLink(shortId);
 
-      if (!linkData) {
+      if (!linkDataVal) {
         setAccessDeniedReason("Access Denied. This message link is not valid or has expired.");
         setIsAuthorized(false);
+        setCurrentLinkData(null);
         return;
       }
+      
+      setCurrentLinkData(linkDataVal); // Store the full link data
 
-      if (!secretKey || linkData.secretKey !== secretKey) {
+      if (!secretKey || linkDataVal.secretKey !== secretKey) {
         setAccessDeniedReason("Access Denied. The secret key is missing or incorrect. Please use the private link provided during generation.");
         setIsAuthorized(false);
         return;
       }
       
       setIsAuthorized(true);
-      const storedMessages = await getMessages(linkId);
+      // Use linkDataVal.id (UUID) for getMessages
+      const storedMessages = await getMessages(linkDataVal.id);
       setMessages(storedMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (error) {
       console.error("Error fetching messages or validating link:", error);
       setAccessDeniedReason("An error occurred while trying to load messages. Please try again.");
       setIsAuthorized(false); 
+      setCurrentLinkData(null);
       toast({ title: "Error", description: "Could not load messages.", variant: "destructive" });
     } finally {
       setIsFetching(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkId, secretKey, toast]); 
+  }, [shortId, secretKey, toast]); 
 
   useEffect(() => {
-    if (linkId) {
+    if (shortId) {
       validateAndFetchMessages();
     } else {
       setAccessDeniedReason("No link ID provided.");
       setIsAuthorized(false);
       setIsFetching(false);
     }
-  }, [linkId, validateAndFetchMessages]);
+  }, [shortId, validateAndFetchMessages]);
 
 
   const handleRefresh = async () => {
@@ -97,12 +103,11 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
       return;
     }
     setIsSummarizing(true);
-    setSummaryResult(null); // Clear previous summary
+    setSummaryResult(null); 
     try {
       const messageTexts = messages.map(msg => msg.text);
       const result: SummarizeMessagesOutput = await summarizeMessages({ messages: messageTexts });
       setSummaryResult(result.summary);
-      // The summary will be shown in an AlertDialog triggered by this state change
     } catch (error) {
       console.error("Error summarizing messages:", error);
       toast({ title: "Summarization Failed", description: "Could not generate a summary.", variant: "destructive" });
@@ -113,10 +118,11 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
   };
 
   const handleDeleteMessage = async () => {
-    if (!messageToDelete || !linkId || !secretKey) return;
+    if (!messageToDelete || !currentLinkData || !secretKey) return;
     setIsDeleting(true);
     try {
-      await deleteMessage(messageToDelete.id, linkId, secretKey);
+      // Use currentLinkData.id (UUID) for deleteMessage
+      await deleteMessage(messageToDelete.id, currentLinkData.id, secretKey);
       setMessages(prevMessages => prevMessages.filter(msg => msg.id !== messageToDelete.id));
       toast({ title: "Message Deleted", description: "The message has been removed.", variant: "default" });
     } catch (error) {
@@ -124,7 +130,7 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
       toast({ title: "Deletion Failed", description: "Could not delete the message.", variant: "destructive" });
     } finally {
       setIsDeleting(false);
-      setMessageToDelete(null); // Close the dialog by resetting the state
+      setMessageToDelete(null); 
     }
   };
 
@@ -137,7 +143,7 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
     );
   }
   
-  if (!isAuthorized) {
+  if (!isAuthorized || !currentLinkData) {
     return (
       <CardContent className="p-6">
         <div className="text-center p-6 bg-destructive/10 border border-destructive rounded-md">

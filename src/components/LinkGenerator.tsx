@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -38,7 +37,7 @@ export default function LinkGenerator() {
       console.error("Failed to generate link:", error);
       toast({
         title: 'Error Generating Link',
-        description: 'Could not generate a new link. Please try again.',
+        description: (error as Error)?.message || 'Could not generate a new link. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -62,7 +61,7 @@ export default function LinkGenerator() {
     });
   };
 
-  if (!baseUrl) { // Still loading base URL (client-side effect)
+  if (!baseUrl) { 
     return (
       <div className="flex justify-center items-center p-8">
         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
@@ -87,12 +86,13 @@ export default function LinkGenerator() {
           <div>
             <Label htmlFor="sharableLink" className="text-muted-foreground font-semibold">Your Sharable Anonymous Link (Public):</Label>
             <div className="flex items-center gap-2 mt-1">
-              <Input id="sharableLink" type="text" value={`${baseUrl}/link/${generatedLink.id}`} readOnly className="bg-input text-foreground"/>
-              <Button variant="outline" size="icon" onClick={() => copyToClipboard(`${baseUrl}/link/${generatedLink.id}`, 'Sharable Link')} aria-label="Copy sharable link">
+              {/* Use /s/ and shortId for sharable link */}
+              <Input id="sharableLink" type="text" value={`${baseUrl}/s/${generatedLink.shortId}`} readOnly className="bg-input text-foreground"/>
+              <Button variant="outline" size="icon" onClick={() => copyToClipboard(`${baseUrl}/s/${generatedLink.shortId}`, 'Sharable Link')} aria-label="Copy sharable link">
                 <Copy className="h-4 w-4" />
               </Button>
               <Button variant="outline" size="icon" asChild aria-label="Open sharable link">
-                <Link href={`/link/${generatedLink.id}`} target="_blank">
+                <Link href={`/s/${generatedLink.shortId}`} target="_blank">
                   <ExternalLink className="h-4 w-4" />
                 </Link>
               </Button>
@@ -104,23 +104,24 @@ export default function LinkGenerator() {
               View Received Messages (Private & Secure):
             </Label>
             <div className="flex items-center gap-2 mt-1">
+              {/* Use /v/ and shortId for messages link */}
               <Input 
                 id="messagesLink" 
                 type="text" 
-                value={`${baseUrl}/messages/${generatedLink.id}?secret=${generatedLink.secretKey}`} 
+                value={`${baseUrl}/v/${generatedLink.shortId}?secret=${generatedLink.secretKey}`} 
                 readOnly 
                 className="bg-input text-foreground"
               />
               <Button 
                 variant="outline" 
                 size="icon" 
-                onClick={() => copyToClipboard(`${baseUrl}/messages/${generatedLink.id}?secret=${generatedLink.secretKey}`, 'Private Messages Link')} 
+                onClick={() => copyToClipboard(`${baseUrl}/v/${generatedLink.shortId}?secret=${generatedLink.secretKey}`, 'Private Messages Link')} 
                 aria-label="Copy private messages link"
               >
                 <Copy className="h-4 w-4" />
               </Button>
                <Button variant="outline" size="icon" asChild aria-label="Open private messages link">
-                <Link href={`/messages/${generatedLink.id}?secret=${generatedLink.secretKey}`} target="_blank">
+                <Link href={`/v/${generatedLink.shortId}?secret=${generatedLink.secretKey}`} target="_blank">
                   <Eye className="h-4 w-4" />
                 </Link>
               </Button>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, FormEvent } from 'react';
@@ -6,18 +5,19 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { moderateContent } from '@/ai/flows/moderate-content';
-import { addMessage, getLink } from '@/lib/store';
+import { addMessage, getLink, type LinkData } from '@/lib/store'; // Import LinkData
 import { Send, Loader2, AlertTriangle } from 'lucide-react';
 import type { ModerateContentOutput } from '@/ai/flows/moderate-content';
 
 interface MessageBoxProps {
-  linkId: string;
+  shortId: string; // Changed from linkId to shortId
 }
 
-export default function MessageBox({ linkId }: MessageBoxProps) {
+export default function MessageBox({ shortId }: MessageBoxProps) {
   const [messageText, setMessageText] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false); // Renamed from isLoading for clarity
-  const [isLinkValid, setIsLinkValid] = useState<boolean | null>(null); // null: validating, true: valid, false: invalid
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentLinkData, setCurrentLinkData] = useState<LinkData | null>(null); // Store full link data
+  const [isLinkValid, setIsLinkValid] = useState<boolean | null>(null);
   const [isValidatingLink, setIsValidatingLink] = useState(true);
   const { toast } = useToast();
 
@@ -25,11 +25,17 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
     const validateLink = async () => {
       setIsValidatingLink(true);
       try {
-        const linkExists = await getLink(linkId);
-        setIsLinkValid(!!linkExists);
+        // Fetch link by shortId
+        const linkData = await getLink(shortId);
+        if (linkData) {
+          setCurrentLinkData(linkData); // Store the fetched link data (includes UUID id)
+          setIsLinkValid(true);
+        } else {
+          setIsLinkValid(false);
+        }
       } catch (error) {
         console.error("Error validating link:", error);
-        setIsLinkValid(false); // Assume invalid on error
+        setIsLinkValid(false);
         toast({
           title: 'Error',
           description: 'Could not verify the link. It might be invalid.',
@@ -40,13 +46,13 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
       }
     };
 
-    if (linkId) {
+    if (shortId) {
       validateLink();
     } else {
-      setIsLinkValid(false); // No linkId provided
+      setIsLinkValid(false);
       setIsValidatingLink(false);
     }
-  }, [linkId, toast]);
+  }, [shortId, toast]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -54,6 +60,15 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
       toast({
         title: 'Empty Message',
         description: 'Please type a message before sending.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!currentLinkData) {
+      toast({
+        title: 'Error',
+        description: 'Link information is not available. Cannot send message.',
         variant: 'destructive',
       });
       return;
@@ -71,7 +86,8 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
           duration: 7000,
         });
       } else {
-        await addMessage(linkId, messageText, true, moderationResult.reason);
+        // Use currentLinkData.id (UUID) for addMessage
+        await addMessage(currentLinkData.id, messageText, true, moderationResult.reason);
         toast({
           title: 'Message Sent!',
           description: 'Your anonymous message has been delivered.',
@@ -100,7 +116,7 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
     );
   }
 
-  if (!isLinkValid) {
+  if (!isLinkValid || !currentLinkData) {
     return (
       <div className="text-center p-6 bg-destructive/10 border border-destructive rounded-md">
         <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
