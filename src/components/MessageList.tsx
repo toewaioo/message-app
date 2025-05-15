@@ -41,8 +41,6 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
       
       setIsAuthorized(true);
       const storedMessages = await getMessages(linkId);
-      // Supabase already orders by created_at desc, but if not, sort here:
-      // storedMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setMessages(storedMessages);
     } catch (error) {
       console.error("Error fetching messages or validating link:", error);
@@ -115,33 +113,47 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {messages.map((msg) => (
-                <Card key={msg.id} className="bg-background/70 shadow-md hover:shadow-lg transition-shadow duration-300">
-                  <CardHeader className="pb-2 pt-4 px-4">
-                    <div className="flex justify-between items-center">
-                       <CardTitle className="text-sm font-normal text-foreground">
-                        {msg.text}
-                      </CardTitle>
-                      {msg.isSafe === false && (
-                        <ShieldAlert className="h-5 w-5 text-destructive ml-2 shrink-0" title={`Moderation: ${msg.moderationReason}`} />
-                      )}
-                       {msg.isSafe === true && (
-                        <CheckCircle2 className="h-5 w-5 text-green-500 ml-2 shrink-0" title={`Moderation: ${msg.moderationReason || 'Content is safe'}`} />
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardFooter className="text-xs text-muted-foreground pb-3 pt-1 px-4 flex justify-between items-center">
-                    <span>
-                      Received {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
-                    </span>
-                     {msg.isSafe === false && msg.moderationReason && (
-                        <span className="italic text-destructive truncate max-w-[150px] sm:max-w-xs" title={msg.moderationReason}>
-                          Reason: {msg.moderationReason}
-                        </span>
-                      )}
-                  </CardFooter>
-                </Card>
-              ))}
+              {messages.map((msg) => {
+                let displayDate = "Date unavailable";
+                if (msg.createdAt) {
+                  try {
+                    const dateObj = new Date(msg.createdAt);
+                    if (!isNaN(dateObj.getTime())) { // Check if date is valid
+                      displayDate = formatDistanceToNow(dateObj, { addSuffix: true });
+                    }
+                  } catch (e) {
+                    console.warn(`Could not parse date: ${msg.createdAt}`, e);
+                  }
+                }
+                
+                return (
+                  <Card key={msg.id} className="bg-background/70 shadow-md hover:shadow-lg transition-shadow duration-300">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <div className="flex justify-between items-center">
+                         <CardTitle className="text-sm font-normal text-foreground">
+                          {msg.text}
+                        </CardTitle>
+                        {msg.isSafe === false && (
+                          <ShieldAlert className="h-5 w-5 text-destructive ml-2 shrink-0" title={`Moderation: ${msg.moderationReason}`} />
+                        )}
+                         {msg.isSafe === true && (
+                          <CheckCircle2 className="h-5 w-5 text-green-500 ml-2 shrink-0" title={`Moderation: ${msg.moderationReason || 'Content is safe'}`} />
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardFooter className="text-xs text-muted-foreground pb-3 pt-1 px-4 flex justify-between items-center">
+                      <span>
+                        Received {displayDate}
+                      </span>
+                       {msg.isSafe === false && msg.moderationReason && (
+                          <span className="italic text-destructive truncate max-w-[150px] sm:max-w-xs" title={msg.moderationReason}>
+                            Reason: {msg.moderationReason}
+                          </span>
+                        )}
+                    </CardFooter>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </ScrollArea>
@@ -157,3 +169,4 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
     </>
   );
 }
+
