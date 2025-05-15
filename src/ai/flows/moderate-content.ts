@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -17,8 +18,8 @@ const ModerateContentInputSchema = z.object({
 export type ModerateContentInput = z.infer<typeof ModerateContentInputSchema>;
 
 const ModerateContentOutputSchema = z.object({
-  isSafe: z.boolean().describe('Whether the content is safe or not.'),
-  reason: z.string().describe('The reason for the moderation decision.'),
+  isSafe: z.boolean().describe("MUST be 'false' if ANY policy is violated. MUST be 'true' if and only if NO policies are violated."),
+  reason: z.string().describe("If 'isSafe' is 'false', MUST clearly state which policy (or policies) were violated and provide a brief, specific explanation related to the text. If 'isSafe' is 'true', MUST be 'Content meets safety guidelines.'"),
 });
 export type ModerateContentOutput = z.infer<typeof ModerateContentOutputSchema>;
 
@@ -30,36 +31,31 @@ const moderateContentPrompt = ai.definePrompt({
   name: 'moderateContentPrompt',
   input: {schema: ModerateContentInputSchema},
   output: {schema: ModerateContentOutputSchema},
-  prompt: `You are an AI content moderation expert.
+  prompt: `You are an AI content moderation system. Your task is to analyze the provided text and determine if it violates any of our content policies.
 
-You will determine whether the provided text is safe or not based on the following criteria:
-- Hate speech
-- Harassment
-- Sexually explicit content
-- Dangerous content
-- Promotion of violence
+Policies:
+1.  Hate Speech: Content that promotes violence, incites hatred, promotes discrimination, or disparages on the basis of race or ethnic origin, religion, disability, age, nationality, veteran status, sexual orientation, sex, gender, gender identity, caste, immigration status, or any other characteristic that is associated with systemic discrimination or marginalization.
+2.  Harassment: Content that targets an individual or group with malicious attacks, including bullying, shaming, or sexual harassment.
+3.  Sexually Explicit Content: Content that contains nudity, graphic sexual acts, or non-consensual sexual content.
+4.  Dangerous Content: Content that promotes, facilitates, or enables access to harmful activities, such as illegal drugs, weapons, or self-harm.
+5.  Promotion of Violence: Content that incites or glorifies violence against individuals or groups.
 
-If the content violates any of these criteria, set isSafe to false and provide a reason. Otherwise, set isSafe to true and provide a generic safe reason.
+Analyze the following text:
+Text: {{{text}}}
 
-Text: {{{text}}}`,
+Based on your analysis, provide an output STRICTLY adhering to the defined output schema.
+The 'isSafe' field (boolean) MUST be 'false' if ANY policy is violated. It MUST be 'true' if and only if NO policies are violated.
+The 'reason' field (string): If 'isSafe' is 'false', MUST clearly state which policy (or policies) were violated and provide a brief, specific explanation related to the text. If 'isSafe' is 'true', MUST be "Content meets safety guidelines."
+
+Critically evaluate the text. If there is any ambiguity or potential for harm according to the policies, you MUST err on the side of caution and determine 'isSafe' to be 'false'.`,
   config: {
     safetySettings: [
-      {
-        category: 'HARM_CATEGORY_HATE_SPEECH',
-        threshold: 'BLOCK_ONLY_HIGH',
-      },
-      {
-        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-        threshold: 'BLOCK_NONE',
-      },
-      {
-        category: 'HARM_CATEGORY_HARASSMENT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-      },
-      {
-        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        threshold: 'BLOCK_LOW_AND_ABOVE',
-      },
+      { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+      // Not including HARM_CATEGORY_CIVIC_INTEGRITY as it's not explicitly in our policies above.
+      // If it were, we'd add it to the policy list in the prompt and potentially here.
     ],
   },
 });
@@ -72,6 +68,16 @@ const moderateContentFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await moderateContentPrompt(input);
-    return output!;
+    if (!output) {
+      // This case can happen if the model fails to generate valid JSON or if an error occurs.
+      // We should treat this as unsafe to be cautious.
+      console.error('Moderation flow received no output from prompt. Input:', input.text);
+      return {
+        isSafe: false,
+        reason: 'Content could not be analyzed by the moderation system. Blocked as a precaution.',
+      };
+    }
+    return output;
   }
 );
+
