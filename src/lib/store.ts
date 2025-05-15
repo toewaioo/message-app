@@ -1,74 +1,117 @@
-// This is a simple client-side store using localStorage for demo purposes.
-// In a real application, you would use a database.
+import { supabase } from './supabaseClient';
 import type { LinkData, Message } from './types';
 
-const LINKS_KEY = 'whisperlink_links';
-const MESSAGES_KEY_PREFIX = 'whisperlink_messages_';
-
+// Helper function to generate a random ID (can be used for secretKey)
 export const generateId = (): string => {
   if (typeof self !== 'undefined' && self.crypto && self.crypto.randomUUID) {
     return self.crypto.randomUUID();
   }
+  // Fallback for environments without crypto.randomUUID
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 };
 
 // For Links
-export const createLink = (): LinkData => {
-  if (typeof window === 'undefined') {
-    // Should not happen if called from client component correctly
-    throw new Error("localStorage is not available.");
+export const createLink = async (): Promise<LinkData> => {
+  const generatedSecretKey = generateId();
+  const { data, error } = await supabase
+    .from('links')
+    .insert([{ secret_key: generatedSecretKey }]) // Supabase auto-generates 'id' and 'created_at'
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating link:', error);
+    throw error;
   }
-  const links = getAllLinks();
-  const newLink: LinkData = {
-    id: generateId(),
-    createdAt: new Date().toISOString(),
-    secretKey: generateId(), // Generate a secret key for accessing messages
+
+  if (!data) {
+    throw new Error('Failed to create link, no data returned.');
+  }
+  
+  // Map Supabase response to LinkData type
+  return {
+    id: data.id,
+    createdAt: data.created_at,
+    secretKey: data.secret_key,
   };
-  links.push(newLink);
-  window.localStorage.setItem(LINKS_KEY, JSON.stringify(links));
-  return newLink;
 };
 
-export const getLink = (linkId: string): LinkData | undefined => {
-  if (typeof window === 'undefined') return undefined;
-  const links = getAllLinks();
-  return links.find(link => link.id === linkId);
-};
+export const getLink = async (linkId: string): Promise<LinkData | undefined> => {
+  const { data, error } = await supabase
+    .from('links')
+    .select('id, created_at, secret_key')
+    .eq('id', linkId)
+    .single();
 
-const getAllLinks = (): LinkData[] => {
-  if (typeof window === 'undefined') return [];
-  const linksJson = window.localStorage.getItem(LINKS_KEY);
-  return linksJson ? JSON.parse(linksJson) : [];
-};
+  if (error) {
+    if (error.code === 'PGRST116') { // PGRST116: "Query response not a single object" (i.e. not found)
+      return undefined;
+    }
+    console.error('Error fetching link:', error);
+    throw error;
+  }
+  
+  if (!data) return undefined;
 
+  return {
+    id: data.id,
+    createdAt: data.created_at,
+    secretKey: data.secret_key,
+  };
+};
 
 // For Messages
-export const addMessage = (
+export const addMessage = async (
   linkId: string,
   text: string,
   isSafe?: boolean,
   moderationReason?: string
-): Message => {
-  if (typeof window === 'undefined') {
-     throw new Error("localStorage is not available.");
+): Promise<Message> => {
+  const { data, error } = await supabase
+    .from('messages')
+    .insert([
+      {
+        link_id: linkId,
+        text,
+        is_safe: isSafe,
+        moderation_reason: moderationReason,
+        // is_anonymous is true by default in DB schema
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error adding message:', error);
+    throw error;
   }
-  const messages = getMessages(linkId);
-  const newMessage: Message = {
-    id: generateId(),
-    linkId,
-    text,
-    createdAt: new Date().toISOString(),
-    isAnonymous: true,
-    isSafe,
-    moderationReason,
+
+  if (!data) {
+    throw new Error('Failed to add message, no data returned.');
+  }
+
+  return {
+    id: data.id,
+    linkId: data.link_id,
+    text: data.text,
+    createdAt: data.created_at,
+    isAnonymous: data.is_anonymous,
+    isSafe: data.is_safe,
+    moderationReason: data.moderation_reason,
   };
-  messages.push(newMessage);
-  window.localStorage.setItem(`${MESSAGES_KEY_PREFIX}${linkId}`, JSON.stringify(messages));
-  return newMessage;
 };
 
-export const getMessages = (linkId: string): Message[] => {
-  if (typeof window === 'undefined') return [];
-  const messagesJson = window.localStorage.getItem(`${MESSAGES_KEY_PREFIX}${linkId}`);
-  return messagesJson ? JSON.parse(messagesJson) : [];
+export const getMessages = async (linkId: string): Promise<Message[]> => {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('link_id', linkId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching messages:', error);
+    throw error;
+  }
+
+  return data || [];
 };

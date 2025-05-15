@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, FormEvent } from 'react';
@@ -15,17 +16,37 @@ interface MessageBoxProps {
 
 export default function MessageBox({ linkId }: MessageBoxProps) {
   const [messageText, setMessageText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLinkValid, setIsLinkValid] = useState<boolean | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Renamed from isLoading for clarity
+  const [isLinkValid, setIsLinkValid] = useState<boolean | null>(null); // null: validating, true: valid, false: invalid
+  const [isValidatingLink, setIsValidatingLink] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Validate linkId on client mount
-    if (typeof window !== 'undefined') {
-      const linkExists = !!getLink(linkId);
-      setIsLinkValid(linkExists);
+    const validateLink = async () => {
+      setIsValidatingLink(true);
+      try {
+        const linkExists = await getLink(linkId);
+        setIsLinkValid(!!linkExists);
+      } catch (error) {
+        console.error("Error validating link:", error);
+        setIsLinkValid(false); // Assume invalid on error
+        toast({
+          title: 'Error',
+          description: 'Could not verify the link. It might be invalid.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsValidatingLink(false);
+      }
+    };
+
+    if (linkId) {
+      validateLink();
+    } else {
+      setIsLinkValid(false); // No linkId provided
+      setIsValidatingLink(false);
     }
-  }, [linkId]);
+  }, [linkId, toast]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -38,7 +59,7 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
       const moderationResult: ModerateContentOutput = await moderateContent({ text: messageText });
 
@@ -49,10 +70,8 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
           variant: 'destructive',
           duration: 7000,
         });
-        // Optionally, store the blocked message attempt for the owner to see
-        // addMessage(linkId, messageText, false, moderationResult.reason);
       } else {
-        addMessage(linkId, messageText, true, moderationResult.reason);
+        await addMessage(linkId, messageText, true, moderationResult.reason);
         toast({
           title: 'Message Sent!',
           description: 'Your anonymous message has been delivered.',
@@ -68,11 +87,11 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
         variant: 'destructive',
       });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
   
-  if (isLinkValid === null) { // Still checking link validity
+  if (isValidatingLink || isLinkValid === null) { 
     return (
       <div className="flex justify-center items-center p-8">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -99,16 +118,16 @@ export default function MessageBox({ linkId }: MessageBoxProps) {
         placeholder="Type your anonymous message here..."
         rows={5}
         className="bg-input text-foreground placeholder-muted-foreground focus:ring-primary focus:border-primary"
-        disabled={isLoading}
+        disabled={isSubmitting}
         aria-label="Anonymous message input"
       />
-      <Button type="submit" className="w-full text-lg py-3 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all duration-300 ease-in-out transform hover:scale-105" disabled={isLoading}>
-        {isLoading ? (
+      <Button type="submit" className="w-full text-lg py-3 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all duration-300 ease-in-out transform hover:scale-105" disabled={isSubmitting}>
+        {isSubmitting ? (
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
         ) : (
           <Send className="mr-2 h-5 w-5" />
         )}
-        {isLoading ? 'Sending...' : 'Send Anonymously'}
+        {isSubmitting ? 'Sending...' : 'Send Anonymously'}
       </Button>
        <p className="text-xs text-muted-foreground text-center pt-2">
         Messages are checked by AI for harmful content.

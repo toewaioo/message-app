@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -6,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { createLink, type LinkData } from '@/lib/store';
-import { Link2, Copy, Eye, ExternalLink, RefreshCw, KeyRound, AlertTriangle } from 'lucide-react';
+import { Link2, Copy, Eye, ExternalLink, RefreshCw, KeyRound, AlertTriangle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -14,18 +15,19 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 export default function LinkGenerator() {
   const [generatedLink, setGeneratedLink] = useState<LinkData | null>(null);
   const [baseUrl, setBaseUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Ensure window is defined (client-side)
     if (typeof window !== 'undefined') {
       setBaseUrl(window.location.origin);
     }
   }, []);
 
-  const handleGenerateLink = () => {
+  const handleGenerateLink = async () => {
+    setIsLoading(true);
     try {
-      const newLink = createLink();
+      const newLink = await createLink();
       setGeneratedLink(newLink);
       toast({
         title: 'Link Generated!',
@@ -39,6 +41,8 @@ export default function LinkGenerator() {
         description: 'Could not generate a new link. Please try again.',
         variant: 'destructive',
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -58,7 +62,7 @@ export default function LinkGenerator() {
     });
   };
 
-  if (!baseUrl) {
+  if (!baseUrl) { // Still loading base URL (client-side effect)
     return (
       <div className="flex justify-center items-center p-8">
         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
@@ -69,8 +73,13 @@ export default function LinkGenerator() {
 
   return (
     <div className="space-y-6">
-      <Button onClick={handleGenerateLink} className="w-full text-lg py-6 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all duration-300 ease-in-out transform hover:scale-105">
-        <Link2 className="mr-2 h-5 w-5" /> Generate New Link
+      <Button 
+        onClick={handleGenerateLink} 
+        className="w-full text-lg py-6 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all duration-300 ease-in-out transform hover:scale-105"
+        disabled={isLoading}
+      >
+        {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Link2 className="mr-2 h-5 w-5" />}
+        {isLoading ? 'Generating...' : 'Generate New Link'}
       </Button>
 
       {generatedLink && (

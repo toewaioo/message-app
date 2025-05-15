@@ -1,76 +1,85 @@
+
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getMessages, getLink, type Message, type LinkData } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
-import { AlertTriangle, CheckCircle2, MessageCircle, RefreshCw, ShieldAlert, ShieldX } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, MessageCircle, RefreshCw, ShieldAlert, ShieldX, Loader2 as CustomLoader } from 'lucide-react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 interface MessageListProps {
   linkId: string;
-  secretKey?: string; // Secret key from URL query param
+  secretKey?: string;
 }
 
 export default function MessageList({ linkId, secretKey }: MessageListProps) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null); // null: loading, true: authorized, false: not authorized
+  const [isFetching, setIsFetching] = useState(true); // Combined loading state
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [accessDeniedReason, setAccessDeniedReason] = useState<string>("Access Denied. The link may be invalid or your secret key is incorrect/missing.");
   const { toast } = useToast();
 
-  const validateAndFetchMessages = () => {
-    if (typeof window !== 'undefined') {
-      setIsLoading(true);
-      const linkData: LinkData | undefined = getLink(linkId);
+  const validateAndFetchMessages = useCallback(async () => {
+    setIsFetching(true);
+    try {
+      const linkData: LinkData | undefined = await getLink(linkId);
 
       if (!linkData) {
         setAccessDeniedReason("Access Denied. This message link is not valid or has expired.");
         setIsAuthorized(false);
-        setIsLoading(false);
         return;
       }
 
       if (!secretKey || linkData.secretKey !== secretKey) {
         setAccessDeniedReason("Access Denied. The secret key is missing or incorrect. Please use the private link provided during generation.");
         setIsAuthorized(false);
-        setIsLoading(false);
         return;
       }
       
-      // If authorized
       setIsAuthorized(true);
-      const storedMessages = getMessages(linkId);
-      storedMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const storedMessages = await getMessages(linkId);
+      // Supabase already orders by created_at desc, but if not, sort here:
+      // storedMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setMessages(storedMessages);
-      setIsLoading(false);
+    } catch (error) {
+      console.error("Error fetching messages or validating link:", error);
+      setAccessDeniedReason("An error occurred while trying to load messages. Please try again.");
+      setIsAuthorized(false); // Assume not authorized on error
+      toast({ title: "Error", description: "Could not load messages.", variant: "destructive" });
+    } finally {
+      setIsFetching(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkId, secretKey, toast]); // Added toast to deps as it's used inside
 
   useEffect(() => {
-    validateAndFetchMessages();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkId, secretKey]);
+    if (linkId) {
+      validateAndFetchMessages();
+    } else {
+      setAccessDeniedReason("No link ID provided.");
+      setIsAuthorized(false);
+      setIsFetching(false);
+    }
+  }, [linkId, validateAndFetchMessages]);
 
 
-  const handleRefresh = () => {
-    // Add a small delay to simulate network request and show loading state
-    setTimeout(() => {
-      validateAndFetchMessages(); // Re-validates and fetches
-      if(isAuthorized) {
-        toast({ title: "Messages Updated", description: "Fetched the latest messages."});
-      } else {
-         toast({ title: "Update Failed", description: "Could not fetch messages. Check access.", variant: "destructive"});
-      }
-    }, 500);
+  const handleRefresh = async () => {
+    setIsFetching(true); // Show loader during refresh
+    await validateAndFetchMessages(); // Re-validates and fetches
+    if(isAuthorized) { // isAuthorized state would have been updated by validateAndFetchMessages
+      toast({ title: "Messages Updated", description: "Fetched the latest messages."});
+    } else {
+       toast({ title: "Update Failed", description: accessDeniedReason, variant: "destructive"});
+    }
   }
 
-  if (isLoading || isAuthorized === null) { // Still loading or initial state
+  if (isFetching || isAuthorized === null) {
      return (
-      <CardContent className="p-6 text-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+      <CardContent className="p-6 text-center min-h-[300px] flex flex-col justify-center items-center">
+        <CustomLoader className="h-8 w-8 animate-spin text-primary mb-2" />
         <p className="text-muted-foreground">Verifying access and loading messages...</p>
       </CardContent>
     );
@@ -92,8 +101,8 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
     <>
       <CardContent className="p-0">
         <div className="p-4 border-b border-border flex justify-end">
-            <Button onClick={handleRefresh} variant="outline" size="sm" disabled={isLoading}>
-                {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            <Button onClick={handleRefresh} variant="outline" size="sm" disabled={isFetching}>
+                {isFetching ? <CustomLoader className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                 Refresh
             </Button>
         </div>
@@ -117,7 +126,7 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
                         <ShieldAlert className="h-5 w-5 text-destructive ml-2 shrink-0" title={`Moderation: ${msg.moderationReason}`} />
                       )}
                        {msg.isSafe === true && (
-                        <CheckCircle2 className="h-5 w-5 text-green-500 ml-2 shrink-0" title={`Moderation: ${msg.moderationReason}`} />
+                        <CheckCircle2 className="h-5 w-5 text-green-500 ml-2 shrink-0" title={`Moderation: ${msg.moderationReason || 'Content is safe'}`} />
                       )}
                     </div>
                   </CardHeader>
@@ -146,25 +155,5 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
         </CardFooter>
       )}
     </>
-  );
-}
-
-// Simple loader for initial loading state
-function Loader2(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
   );
 }
