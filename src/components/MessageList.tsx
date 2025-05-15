@@ -114,15 +114,16 @@ export default function MessageList({ linkId, secretKey }: MessageListProps) {
           ) : (
             <div className="space-y-4">
               {messages.map((msg) => {
+                
                 let displayDate = "Date unavailable";
-                if (msg.createdAt) {
+                if (msg.created_at) {
                   try {
-                    const dateObj = new Date(msg.createdAt);
+                    const dateObj = new Date(msg.created_at);
                     if (!isNaN(dateObj.getTime())) { // Check if date is valid
                       displayDate = formatDistanceToNow(dateObj, { addSuffix: true });
                     }
                   } catch (e) {
-                    console.warn(`Could not parse date: ${msg.createdAt}`, e);
+                    console.warn(`Could not parse date: ${msg.created_at}`, e);
                   }
                 }
                 
